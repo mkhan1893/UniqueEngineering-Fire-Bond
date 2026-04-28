@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -- Helpers --
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email == "uniqueengg1976@gmail.com" && 
+             request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // -- Product Validation --
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'description', 'imageUrl', 'category', 'subcategory', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 7 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+             data.description is string && data.description.size() >= 10 && data.description.size() <= 2000 &&
+             data.imageUrl is string && data.imageUrl.size() <= 1000 &&
+             data.category is string && data.category.size() >= 2 &&
+             data.subcategory is string && data.subcategory.size() >= 2 &&
+             data.createdAt == request.time &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidProductUpdate(data) {
+      return data.keys().hasAll(['name', 'description', 'imageUrl', 'category', 'subcategory', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 7 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+             data.description is string && data.description.size() >= 10 && data.description.size() <= 2000 &&
+             data.imageUrl is string && data.imageUrl.size() <= 1000 &&
+             data.category is string && data.category.size() >= 2 &&
+             data.subcategory is string && data.subcategory.size() >= 2 &&
+             data.createdAt == existing().createdAt &&
+             data.updatedAt == request.time;
+    }
+
+    // -- Products Collection --
+    match /products/{productId} {
+      allow read: if true; // Publicly readable
+      allow create: if isAdmin() && isValidProduct(incoming());
+      allow update: if isAdmin() && isValidProductUpdate(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'imageUrl', 'category', 'subcategory', 'updatedAt'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // -- Leads Collection --
+    match /leads/{leadId} {
+      allow create: if true; // Public can submit leads
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
